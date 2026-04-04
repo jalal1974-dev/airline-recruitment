@@ -1,0 +1,55 @@
+Fix these 3 bugs in this airline recruitment project. 
+Don't change any working features (home page, jobs page, 
+job details, Arabic/English switch all work perfectly).
+
+BUG 1 - CRITICAL: /admin route redirects to home page
+When admin logs in and goes to /admin, it redirects to / instead 
+of showing the admin dashboard. Fix the routing:
+- /admin → AdminDashboard (stats cards, recent applications)
+- /admin/jobs → ManageJobs (jobs table, create/edit/delete)
+- /admin/jobs/create → CreateJob (bilingual form)
+- /admin/jobs/:jobId/applications → JobApplications (applications table + AI filter button)
+- /admin/applications/:id → ApplicationDetail (full application info)
+- These routes must check user.role === "admin" from auth context
+- If not admin, redirect to /login
+- Make sure the route guard reads the role correctly from both 
+  auth context AND localStorage
+
+BUG 2: Logout button does nothing
+The "تسجيل الخروج" / "Logout" button in navbar doesn't work.
+Fix the logout function to:
+- Remove "token" from localStorage
+- Remove "user" from localStorage
+- Set auth context user state to null
+- Set auth context token state to null
+- Navigate/redirect to home page /
+- Navbar should immediately show "Login" + "Register" again
+
+BUG 3: Admin sees wrong navbar links
+When admin (role: "admin") logs in, navbar shows "طلباتي" 
+(My Applications) instead of "لوحة الإدارة" (Admin Panel).
+Fix the navbar component to check user.role:
+- If user.role === "admin": show "Admin Panel"/"لوحة الإدارة" 
+  link pointing to /admin AND "Logout"/"تسجيل الخروج" button
+- If user.role === "applicant": show "My Applications"/"طلباتي" 
+  link pointing to /my-applications AND "Logout" button  
+- If not logged in: show "Login"/"تسجيل الدخول" link AND 
+  "Register"/"التسجيل" button
+
+ROOT CAUSE to check:
+1. The login API returns { token, user: { id, email, role, fullName } }
+2. After login, BOTH token AND user object (with role) must be 
+   saved to localStorage: localStorage.setItem("user", JSON.stringify(user))
+3. Auth context must store the full user object including role
+4. On app load/refresh, read from localStorage to restore auth state
+5. Navbar must read user.role from auth context
+6. Admin route guard must check user.role === "admin"
+
+Admin credentials: admin@jordanaviation.com / admin123456
+This admin user has role: "admin" in the database.
+
+After fixing, make sure:
+- Admin login → navbar shows "Admin Panel" → clicking it opens /admin dashboard
+- /admin shows stats cards (total jobs, applications, etc.)
+- Logout button works and clears everything
+- Page refresh keeps user logged in
