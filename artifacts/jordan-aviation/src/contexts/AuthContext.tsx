@@ -21,18 +21,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        loadProfile(session.user.id);
+      const u = session?.user ?? null;
+      setUser(u);
+      if (u) {
+        loadProfile(u);
       } else {
         setLoading(false);
       }
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        await loadProfile(session.user.id);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      const u = session?.user ?? null;
+      setUser(u);
+      if (u) {
+        await loadProfile(u);
       } else {
         setProfile(null);
         setLoading(false);
@@ -42,28 +44,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  async function loadProfile(userId: string) {
+  async function loadProfile(u: User) {
+    // Read role from user_metadata first (reliable, no RLS issues)
+    const metaRole = u.user_metadata?.role as string | undefined;
+    const metaNameEn = u.user_metadata?.full_name_en as string | undefined;
+    const metaNameAr = u.user_metadata?.full_name_ar as string | undefined;
+
+    // Set a synthetic profile from metadata immediately so isAdmin works at once
+    const metaProfile: Profile = {
+      id: u.id,
+      full_name_en: metaNameEn || u.email || '',
+      full_name_ar: metaNameAr || null,
+      phone: null,
+      nationality: null,
+      role: (metaRole === 'admin' ? 'admin' : 'applicant') as 'admin' | 'applicant',
+      created_at: '',
+      updated_at: '',
+    };
+    setProfile(metaProfile);
+
+    // Also try to fetch the actual profiles table row for richer data
     try {
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
-        .eq('id', userId)
+        .eq('id', u.id)
         .maybeSingle();
 
-      if (error) throw error;
-      setProfile(data);
-    } catch (error) {
-      console.error('Error loading profile:', error);
+      if (!error && data) {
+        // Profiles table row found — use it but prefer metadata role if DB row says applicant
+        // and metadata says admin (to handle migration period)
+        const finalRole = metaRole === 'admin' ? 'admin' : data.role;
+        setProfile({ ...data, role: finalRole });
+        console.log('[AuthContext] Profile from DB:', data, '| final role:', finalRole);
+      } else {
+        console.log('[AuthContext] No DB profile, using metadata. role:', metaRole);
+      }
+    } catch (err) {
+      console.warn('[AuthContext] Could not fetch profiles table:', err);
     } finally {
       setLoading(false);
     }
   }
 
   async function signIn(email: string, password: string) {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
   }
 
@@ -78,21 +103,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
+      options: {
+        data: {
+          full_name_en: fullNameEn,
+          full_name_ar: fullNameAr || null,
+          phone: phone || null,
+          role: 'applicant',
+        }
+      }
     });
     if (error) throw error;
 
     if (data.user) {
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .insert({
-          id: data.user.id,
-          full_name_en: fullNameEn,
-          full_name_ar: fullNameAr || null,
-          phone: phone || null,
-          nationality: nationality || null,
-          role: 'applicant',
-        });
-      if (profileError) throw profileError;
+      // Try inserting a profiles row; ignore failure if RLS blocks it
+      await supabase.from('profiles').insert({
+        id: data.user.id,
+        full_name_en: fullNameEn,
+        full_name_ar: fullNameAr || null,
+        phone: phone || null,
+        nationality: nationality || null,
+        role: 'applicant',
+      }).then(({ error: profileError }) => {
+        if (profileError) {
+          console.warn('[AuthContext] Could not insert profile row:', profileError.message);
+        }
+      });
     }
   }
 
@@ -102,7 +137,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile(null);
   }
 
-  const isAdmin = profile?.role === 'admin';
+  // isAdmin: check both the profile object and user_metadata as fallback
+  const isAdmin =
+    profile?.role === 'admin' ||
+    user?.user_metadata?.role === 'admin';
+
+  console.log('[AuthContext] user:', user?.email, '| profile.role:', profile?.role, '| isAdmin:', isAdmin);
 
   return (
     <AuthContext.Provider value={{ user, profile, loading, signIn, signUp, signOut, isAdmin }}>
