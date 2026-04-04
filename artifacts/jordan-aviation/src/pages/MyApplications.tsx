@@ -8,18 +8,19 @@ import Footer from '../components/Footer';
 
 export default function MyApplications() {
   const { t, i18n } = useTranslation();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [applications, setApplications] = useState<(Application & { jobs: Job })[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (authLoading) return; // wait for auth to finish
     if (!user) {
       navigate('/login');
       return;
     }
     fetchApplications();
-  }, [user]);
+  }, [user, authLoading]);
 
   async function fetchApplications() {
     try {

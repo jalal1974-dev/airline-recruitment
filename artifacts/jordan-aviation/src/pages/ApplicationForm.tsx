@@ -11,7 +11,7 @@ import Footer from '../components/Footer';
 export default function ApplicationForm() {
   const { t, i18n } = useTranslation();
   const { jobId } = useParams<{ jobId: string }>();
-  const { user, profile } = useAuth();
+  const { user, profile, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [job, setJob] = useState<Job | null>(null);
   const [loading, setLoading] = useState(false);
@@ -39,9 +39,10 @@ export default function ApplicationForm() {
   const [newSkill, setNewSkill] = useState('');
 
   useEffect(() => {
+    if (authLoading) return;
     if (!user) { navigate('/login'); return; }
     if (jobId) fetchJob(jobId);
-  }, [user, jobId]);
+  }, [user, authLoading, jobId]);
 
   async function fetchJob(id: string) {
     const { data, error } = await supabase.from('jobs').select('*').eq('id', id).single();

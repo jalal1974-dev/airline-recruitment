@@ -14,100 +14,65 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+function buildProfileFromUser(u: User): Profile {
+  const meta = u.user_metadata || {};
+  return {
+    id: u.id,
+    full_name_en: (meta.full_name_en as string) || u.email || 'User',
+    full_name_ar: (meta.full_name_ar as string) || null,
+    phone: (meta.phone as string) || null,
+    nationality: (meta.nationality as string) || null,
+    role: meta.role === 'admin' ? 'admin' : 'applicant',
+    created_at: '',
+    updated_at: '',
+  };
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
-  const loadingTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Safety net: never stay in loading state more than 5 seconds
-  function startLoadingTimeout() {
-    if (loadingTimeout.current) clearTimeout(loadingTimeout.current);
-    loadingTimeout.current = setTimeout(() => {
-      console.warn('[AuthContext] Loading timeout reached — forcing loading=false');
-      setLoading(false);
-    }, 5000);
-  }
-
-  function clearLoadingTimeout() {
-    if (loadingTimeout.current) {
-      clearTimeout(loadingTimeout.current);
-      loadingTimeout.current = null;
+  function clearSafetyTimeout() {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
     }
   }
 
+  function done(u: User | null) {
+    clearSafetyTimeout();
+    if (u) {
+      setProfile(buildProfileFromUser(u));
+    } else {
+      setProfile(null);
+    }
+    setUser(u);
+    setLoading(false);
+  }
+
   useEffect(() => {
-    startLoadingTimeout();
+    // Safety net: never stay loading more than 4 seconds
+    timeoutRef.current = setTimeout(() => {
+      setLoading(false);
+    }, 4000);
 
     supabase.auth.getSession().then(({ data: { session } }) => {
-      const u = session?.user ?? null;
-      setUser(u);
-      if (u) {
-        loadProfile(u);
-      } else {
-        clearLoadingTimeout();
-        setLoading(false);
-      }
+      done(session?.user ?? null);
     }).catch(() => {
-      clearLoadingTimeout();
-      setLoading(false);
+      done(null);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      const u = session?.user ?? null;
-      setUser(u);
-      if (u) {
-        startLoadingTimeout();
-        await loadProfile(u);
-      } else {
-        clearLoadingTimeout();
-        setProfile(null);
-        setLoading(false);
-      }
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      done(session?.user ?? null);
     });
 
     return () => {
       subscription.unsubscribe();
-      clearLoadingTimeout();
+      clearSafetyTimeout();
     };
   }, []);
-
-  async function loadProfile(u: User) {
-    // Read role from user_metadata immediately (no DB query, no RLS, reliable)
-    const metaRole = u.user_metadata?.role as string | undefined;
-    const metaNameEn = (u.user_metadata?.full_name_en as string | undefined) || u.email || 'User';
-    const metaNameAr = u.user_metadata?.full_name_ar as string | undefined;
-
-    const syntheticProfile: Profile = {
-      id: u.id,
-      full_name_en: metaNameEn,
-      full_name_ar: metaNameAr || null,
-      phone: null,
-      nationality: null,
-      role: metaRole === 'admin' ? 'admin' : 'applicant',
-      created_at: '',
-      updated_at: '',
-    };
-    setProfile(syntheticProfile);
-    clearLoadingTimeout();
-    setLoading(false);
-
-    // Optionally enrich with DB profile (non-blocking)
-    try {
-      const { data } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', u.id)
-        .maybeSingle();
-
-      if (data) {
-        const finalRole = metaRole === 'admin' ? 'admin' : data.role;
-        setProfile({ ...data, role: finalRole });
-      }
-    } catch {
-      // silently ignore — syntheticProfile already set above
-    }
-  }
 
   async function signIn(email: string, password: string) {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -122,7 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     phone?: string,
     nationality?: string
   ) {
-    const { data, error } = await supabase.auth.signUp({
+    const { error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -130,45 +95,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           full_name_en: fullNameEn,
           full_name_ar: fullNameAr || null,
           phone: phone || null,
+          nationality: nationality || null,
           role: 'applicant',
         },
       },
     });
     if (error) throw error;
-
-    if (data.user) {
-      await supabase.from('profiles').insert({
-        id: data.user.id,
-        full_name_en: fullNameEn,
-        full_name_ar: fullNameAr || null,
-        phone: phone || null,
-        nationality: nationality || null,
-        role: 'applicant',
-      }).then(({ error: profileError }) => {
-        if (profileError) {
-          console.warn('[AuthContext] Could not insert profile row:', profileError.message);
-        }
-      });
-    }
   }
 
   async function signOut() {
-    // Clear state immediately so UI responds right away
-    setUser(null);
-    setProfile(null);
-
-    // Attempt Supabase signOut but don't let failures block the UI
+    done(null);
     try {
       await supabase.auth.signOut({ scope: 'local' });
-    } catch (err) {
-      console.warn('[AuthContext] signOut error (ignored):', err);
+    } catch {
+      // ignore
     }
-
-    // Belt-and-suspenders: force-clear any stored auth tokens
     try {
-      const storageKey = 'jordan-aviation-auth';
-      localStorage.removeItem(storageKey);
-      // Also clear any legacy keys
+      localStorage.removeItem('jordan-aviation-auth');
       localStorage.removeItem('sb-ocnkjfipugtkzaplqvcf-auth-token');
     } catch {
       // ignore
