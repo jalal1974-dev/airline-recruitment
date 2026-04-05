@@ -1,14 +1,13 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
 import { toast } from 'react-toastify';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 
 export default function Register() {
   const { t } = useTranslation();
-  const { signUp } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
@@ -24,16 +23,47 @@ export default function Register() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (formData.password !== formData.confirmPassword) {
-      toast.error('Passwords do not match');
+      toast.error(t('auth.passwordMismatch') || 'Passwords do not match');
       return;
     }
     setLoading(true);
     try {
-      await signUp(formData.email, formData.password, formData.fullNameEn, formData.fullNameAr, formData.phone, formData.nationality);
+      const { data, error } = await supabase.auth.signUp({
+        email: formData.email,
+        password: formData.password,
+        options: {
+          data: {
+            role: 'applicant',
+            full_name_en: formData.fullNameEn,
+            full_name_ar: formData.fullNameAr || null,
+            phone: formData.phone || null,
+            nationality: formData.nationality || null,
+          },
+        },
+      });
+
+      if (error) {
+        toast.error(error.message || t('auth.registerError'));
+        return;
+      }
+
       toast.success(t('auth.registerSuccess'));
       navigate('/');
-    } catch (error) {
-      toast.error(t('auth.registerError'));
+
+      // Fire-and-forget: insert profile row in background after redirect
+      if (data.user) {
+        supabase.from('profiles').upsert({
+          id: data.user.id,
+          full_name_en: formData.fullNameEn,
+          full_name_ar: formData.fullNameAr || null,
+          phone: formData.phone || null,
+          nationality: formData.nationality || null,
+          role: 'applicant',
+        }).then(() => {}).catch(() => {});
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : t('auth.registerError');
+      toast.error(message);
     } finally {
       setLoading(false);
     }

@@ -1,0 +1,62 @@
+There are loading issues after the admin fix:
+
+PROBLEM 1: Registering a new applicant user keeps loading forever.
+When I register with a new email (e.g. ahmad@test.com / test123456),
+the page gets stuck loading and never completes.
+
+PROBLEM 2: After the loading issue starts, ALL pages keep loading - 
+Jobs page, My Applications, everything gets stuck.
+
+PROBLEM 3: Only admin login works. New user registration is broken.
+
+The root cause is likely:
+1. After registration, the auth state change triggers profile loading
+2. The profile doesn't exist yet for the new user in the profiles table
+3. The profiles table has broken RLS policies (infinite recursion)
+4. This causes the auth context to get stuck loading forever
+
+PLEASE FIX:
+
+1. In AuthContext - when loading profile fails or returns null, 
+   DON'T get stuck loading. Set loading = false even if profile 
+   is null. Use a try-catch with timeout:
+   
+   - If profile fetch fails → set profile to null, loading to false
+   - If profile fetch takes more than 3 seconds → timeout, set loading false
+   - New users won't have a profile row - that's OK, treat them as applicant
+
+2. For new user registration:
+   - After supabase.auth.signUp() succeeds
+   - Try to insert a profile row, but if it fails (RLS), that's OK
+   - Set the user's role in user_metadata as "applicant" during signup
+   - Don't block on profile creation
+
+3. Make the profile loading NON-BLOCKING:
+   - Auth state should be: { user, profile (nullable), isAdmin, loading }
+   - loading should ONLY be true during initial session check
+   - Once we have a user (even without profile), loading = false
+   - isAdmin = user_metadata.role === "admin" (don't depend on profile)
+
+4. Add safety timeout - loading can NEVER exceed 5 seconds:
+   setTimeout(() => setLoading(false), 5000)
+
+5. For the Jobs page and other public pages:
+   - They should work even when not logged in
+   - They should NOT wait for auth loading to finish
+   - Public routes should render immediately
+
+6. Fix the registration flow:
+   - supabase.auth.signUp({ email, password, options: { data: { role: 'applicant', full_name: name } } })
+   - After signup, redirect to home page
+   - Don't try to insert into profiles table (broken RLS)
+   - Read role from user_metadata instead
+
+After fixing:
+- Admin login works (already working)
+- New user registration completes without loading forever
+- Jobs page loads for everyone (logged in or not)
+- My Applications works for logged in applicants
+- No page gets stuck loading
+
+Test with: register ahmad@test.com / test123456
+Then test jobs page, apply for job, my applications.

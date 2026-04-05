@@ -7,14 +7,13 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing Supabase environment variables');
 }
 
-// Disable navigator lock to prevent multi-tab "lock stolen" conflicts
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const noLock = (_name: string, _timeout: number, fn: (value: any) => any) => fn(null);
-
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
     storageKey: 'jordan-aviation-auth',
-    lock: noLock,
+    flowType: 'implicit',
   },
 });
 

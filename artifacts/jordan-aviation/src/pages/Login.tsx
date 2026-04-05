@@ -1,43 +1,47 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
 import { toast } from 'react-toastify';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 
 export default function Login() {
   const { t } = useTranslation();
-  const { signIn, isAdmin, user, loading } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [pendingRedirect, setPendingRedirect] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    if (pendingRedirect && !loading && user) {
-      if (isAdmin) {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+
+      if (error) {
+        toast.error(error.message || t('auth.loginError'));
+        return;
+      }
+
+      toast.success(t('auth.loginSuccess'));
+
+      // Determine redirect immediately from the returned user data — no waiting
+      const u = data.user;
+      const adminByMeta = u?.user_metadata?.role === 'admin';
+      const adminByEmail = u?.email === 'admin@jordanaviation.com';
+
+      if (adminByMeta || adminByEmail) {
         navigate('/admin');
       } else {
         navigate('/');
       }
-      setPendingRedirect(false);
-    }
-  }, [pendingRedirect, loading, user, isAdmin, navigate]);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSubmitting(true);
-
-    try {
-      await signIn(email, password);
-      toast.success(t('auth.loginSuccess'));
-      setPendingRedirect(true);
-    } catch (error) {
-      toast.error(t('auth.loginError'));
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : t('auth.loginError');
+      toast.error(message);
     } finally {
-      setSubmitting(false);
+      setLoading(false);
     }
   };
 
@@ -49,9 +53,7 @@ export default function Login() {
           <h2 className="text-3xl font-bold text-[#1a365d] mb-8 text-center">{t('auth.login')}</h2>
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                {t('auth.email')}
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{t('auth.email')}</label>
               <input
                 type="email"
                 required
@@ -61,9 +63,7 @@ export default function Login() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                {t('auth.password')}
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{t('auth.password')}</label>
               <input
                 type="password"
                 required
@@ -74,10 +74,10 @@ export default function Login() {
             </div>
             <button
               type="submit"
-              disabled={submitting}
+              disabled={loading}
               className="w-full bg-[#1a365d] text-white px-8 py-3 rounded-lg font-semibold hover:bg-[#1a365d]/90 transition disabled:opacity-50"
             >
-              {submitting ? t('common.loading') : t('auth.login')}
+              {loading ? t('common.loading') : t('auth.login')}
             </button>
           </form>
           <p className="mt-6 text-center text-gray-600 text-sm">

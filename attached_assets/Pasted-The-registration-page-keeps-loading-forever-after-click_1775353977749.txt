@@ -1,0 +1,123 @@
+The registration page keeps loading forever after clicking register. 
+The button shows "جاري التحميل..." and never completes.
+Also some pages keep loading infinitely.
+
+The Supabase database RLS policies have been fixed already.
+The broken "Users can read own profile" policy has been deleted.
+Now only 3 clean policies exist on profiles table:
+- "Anyone can read profiles" (SELECT, true)
+- "Users can insert own profile" (INSERT, auth.uid() = id)  
+- "Users can update own profile" (UPDATE, auth.uid() = id)
+
+Now fix the CODE to work properly:
+
+FIX 1 - AuthContext.tsx:
+- In onAuthStateChange callback, when a new user session is detected:
+  a) Set the user immediately
+  b) Get role from user.user_metadata.role (NOT from profiles table query)
+  c) Set isAdmin = user.user_metadata?.role === 'admin' || user.email === 'admin@jordanaviation.com'
+  d) Try to load profile from profiles table in background (non-blocking)
+  e) If profile query fails or times out, that's OK - still set loading = false
+  f) ALWAYS set loading = false within 3 seconds maximum
+  g) Add this safety timeout at the top of the provider:
+     useEffect(() => { 
+       const timer = setTimeout(() => setLoading(false), 5000);
+       return () => clearTimeout(timer);
+     }, []);
+- The key principle: NEVER let loading stay true forever
+- Profile data is nice-to-have, not required
+- Role comes from user_metadata (set during signup)
+
+FIX 2 - Register.tsx:
+- After calling supabase.auth.signUp(), do NOT insert into profiles table
+- Put all user data in the signUp metadata instead:
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      data: {
+        role: 'applicant',
+        full_name_en: fullNameEn,
+        full_name_ar: fullNameAr,
+        phone: phone,
+        nationality: nationality
+      }
+    }
+  });
+- If signUp returns error, show toast error and setLoading(false)
+- If signUp succeeds, show success toast and navigate to '/'
+- Wrap everything in try-catch, always setLoading(false) in finally block
+- Do NOT wait for onAuthStateChange - just redirect immediately after signUp
+- Try to insert profile in background AFTER redirect (non-blocking):
+  supabase.from('profiles').upsert({
+    id: data.user.id,
+    full_name_en: fullNameEn,
+    full_name_ar: fullNameAr,
+    phone,
+    nationality,
+    role: 'applicant'
+  }).then(() => {}).catch(() => {});
+  // Fire and forget - don't await, don't block
+
+FIX 3 - Login.tsx:
+- Same approach: after signInWithPassword succeeds, navigate immediately
+- Don't wait for profile loading
+- Set loading false in finally block
+- Check user_metadata.role or email for admin redirect:
+  if (data.user?.user_metadata?.role === 'admin' || data.user?.email === 'admin@jordanaviation.com') {
+    navigate('/admin');
+  } else {
+    navigate('/');
+  }
+
+FIX 4 - All pages with auth dependency:
+- Home.tsx and Jobs.tsx: render immediately, don't wait for auth
+- JobDetail.tsx: render immediately, only check auth for Apply button
+- MyApplications.tsx: show loading spinner ONLY while auth loading is true
+  AND add timeout - if loading for more than 3 seconds, show "Please login" 
+  and redirect to /login
+- ApplicationForm.tsx: same approach - timeout on loading
+- Admin pages: same - timeout on loading, redirect if not admin after timeout
+
+FIX 5 - Supabase client configuration:
+Make sure the Supabase client has lock disabled to prevent multi-tab issues:
+const supabase = createClient(url, key, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+    storage: localStorage,
+    lock: { 
+      acquireLock: async (_name: string, _acquireTimeout: number, fn: () => Promise<any>) => await fn(),
+      releaseLock: async () => {}
+    }
+  }
+});
+
+If the lock option doesn't work with TypeScript, use this alternative:
+const supabase = createClient(url, key, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+    storageKey: 'jordan-aviation-auth',
+    flowType: 'implicit'
+  }
+});
+
+SUMMARY OF CHANGES:
+1. AuthContext: Role from user_metadata, 5sec timeout, non-blocking profile load
+2. Register: signUp with metadata, fire-and-forget profile insert, always stop loading
+3. Login: immediate redirect after auth, check metadata for admin
+4. All pages: timeout on loading states, public pages don't wait for auth
+5. Supabase client: disable navigator lock
+
+After fixing, test:
+- Register newpilot@test.com / test123456 → should complete in 2 seconds
+- Login admin@jordanaviation.com / admin123456 → admin dashboard loads
+- Logout → works immediately
+- Jobs page → loads without auth
+- Apply for job → form loads for logged in users
+
+Don't change: home page design, jobs page design, Arabic/English switch, 
+admin dashboard layout, job details page. Only fix the auth/loading issues.
