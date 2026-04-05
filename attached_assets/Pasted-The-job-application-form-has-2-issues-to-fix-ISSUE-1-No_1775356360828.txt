@@ -1,0 +1,92 @@
+The job application form has 2 issues to fix:
+
+ISSUE 1: No document upload section.
+Replace the current "الوثائق" (Documents) section with a proper 
+multi-file upload section. The applicant should be able to upload 
+MULTIPLE documents, not just one CV.
+
+Add these file upload fields in the Documents section:
+
+1. Resume/CV (السيرة الذاتية):
+   - Label: "السيرة الذاتية *" / "Resume/CV *"
+   - Accept: .pdf,.doc,.docx
+   - Required field
+   
+2. Professional Certificates (الشهادات المهنية):
+   - Label: "الشهادات المهنية" / "Professional Certificates"
+   - Accept: .pdf,.doc,.docx,.jpg,.jpeg,.png
+   - MULTIPLE files allowed (can upload several certificates)
+   - Optional field
+   
+3. Educational Certificates (الشهادات التعليمية):
+   - Label: "الشهادات التعليمية" / "Educational Certificates"
+   - Accept: .pdf,.doc,.docx,.jpg,.jpeg,.png
+   - MULTIPLE files allowed
+   - Optional field
+
+4. Other Documents (وثائق أخرى):
+   - Label: "وثائق أخرى (جواز سفر، هوية، الخ)" / "Other Documents (passport, ID, etc.)"
+   - Accept: .pdf,.doc,.docx,.jpg,.jpeg,.png
+   - MULTIPLE files allowed
+   - Optional field
+
+For each upload field:
+- Show selected filenames after choosing
+- Show file size
+- Allow removing selected files before submit
+- Max 10MB per file
+- Upload all files to Supabase Storage bucket called "documents"
+- Create the bucket if it doesn't exist (public access)
+- Organize files in folders: documents/{user_id}/{type}/filename
+  where type is: resume, professional, educational, other
+- Save all file URLs in the application record as JSON:
+  documents: {
+    resume: "url",
+    professional_certificates: ["url1", "url2"],
+    educational_certificates: ["url1", "url2"],
+    other_documents: ["url1", "url2"]
+  }
+
+Keep the Cover Letter (خطاب التقديم) textarea AFTER the uploads.
+
+The Documents section order should be:
+1. Resume/CV upload (required)
+2. Professional Certificates upload (optional, multiple)
+3. Educational Certificates upload (optional, multiple)
+4. Other Documents upload (optional, multiple)
+5. Cover Letter textarea (optional)
+
+ISSUE 2: Form submission fails with error.
+Debug and fix the submission:
+1. Add console.error('Submit error:', error) to see actual error
+2. Show real error in toast notification
+3. Check applications table columns match the data
+4. Make sure applications table has a "documents" column (jsonb type)
+   If not, the column needs to be added:
+   ALTER TABLE applications ADD COLUMN IF NOT EXISTS documents jsonb DEFAULT '{}';
+5. Also make sure resume_url column exists for backward compatibility
+6. Log the data: console.log('Submitting:', applicationData)
+7. If file upload fails, show error but don't crash the form
+8. Upload files first, get URLs, then insert application record
+
+Also check the Supabase Storage setup:
+- Create bucket "documents" if not exists
+- Set bucket to public (so files can be downloaded by admin)
+- Or use signed URLs for private access
+
+RLS on applications table should allow:
+- Authenticated users can INSERT their own applications
+- Authenticated users can SELECT their own applications  
+- Admin can SELECT all applications
+- Admin can UPDATE all applications
+
+After fixing, test:
+- Upload a PDF resume
+- Upload 2 professional certificate images
+- Fill rest of form
+- Submit
+- Check Supabase: application row created with document URLs
+- Check Supabase Storage: files uploaded in correct folders
+
+All labels must be bilingual (Arabic shown when Arabic selected,
+English when English selected).

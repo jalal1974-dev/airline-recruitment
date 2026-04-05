@@ -156,6 +156,57 @@ export default function ApplicationDetail() {
               </div>
             )}
 
+            {(application.resume_url || application.documents) && (
+              <div className="bg-white rounded-lg shadow-md p-6">
+                <h2 className="text-xl font-bold text-[#1a365d] mb-4">{t('application.documents')}</h2>
+                <div className="space-y-3">
+                  {(application.documents?.resume || application.resume_url) && (
+                    <div>
+                      <p className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-1">{t('application.resume')}</p>
+                      <a
+                        href={application.documents?.resume || application.resume_url || '#'}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 text-[#1a365d] hover:text-[#f6ad55] underline text-sm font-medium"
+                      >
+                        {t('admin.viewResume')}
+                      </a>
+                    </div>
+                  )}
+                  {application.documents?.professional_certificates?.length > 0 && (
+                    <div>
+                      <p className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-1">{t('application.professionalCerts')}</p>
+                      <ul className="space-y-1">
+                        {application.documents.professional_certificates.map((url, i) => (
+                          <li key={i}><a href={url} target="_blank" rel="noopener noreferrer" className="text-[#1a365d] hover:text-[#f6ad55] underline text-sm">Document {i + 1}</a></li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {application.documents?.educational_certificates?.length > 0 && (
+                    <div>
+                      <p className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-1">{t('application.educationalCerts')}</p>
+                      <ul className="space-y-1">
+                        {application.documents.educational_certificates.map((url, i) => (
+                          <li key={i}><a href={url} target="_blank" rel="noopener noreferrer" className="text-[#1a365d] hover:text-[#f6ad55] underline text-sm">Document {i + 1}</a></li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {application.documents?.other_documents?.length > 0 && (
+                    <div>
+                      <p className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-1">{t('application.otherDocs')}</p>
+                      <ul className="space-y-1">
+                        {application.documents.other_documents.map((url, i) => (
+                          <li key={i}><a href={url} target="_blank" rel="noopener noreferrer" className="text-[#1a365d] hover:text-[#f6ad55] underline text-sm">Document {i + 1}</a></li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {application.cover_letter && (
               <div className="bg-white rounded-lg shadow-md p-6">
                 <h2 className="text-xl font-bold text-[#1a365d] mb-4">{t('admin.coverLetter')}</h2>

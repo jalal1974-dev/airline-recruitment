@@ -81,6 +81,12 @@ export interface Application {
   skills: string[];
   languages: LanguageEntry[];
   resume_url: string | null;
+  documents: {
+    resume: string | null;
+    professional_certificates: string[];
+    educational_certificates: string[];
+    other_documents: string[];
+  } | null;
   cover_letter: string | null;
   total_experience: number;
   highest_education: string | null;
