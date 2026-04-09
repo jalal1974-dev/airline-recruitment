@@ -8,7 +8,7 @@ import Navbar from '../../components/Navbar';
 import Footer from '../../components/Footer';
 
 export default function ApplicationDetail() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const { user, isAdmin, loading } = useAuth();
   const navigate = useNavigate();
@@ -307,13 +307,70 @@ export default function ApplicationDetail() {
             )}
 
             {/* AI Analysis */}
-            {application.ai_analysis && (
+            {application.ai_score != null && (
               <div className="bg-white rounded-lg shadow-md p-6">
-                <h2 className="text-xl font-bold text-[#1a365d] mb-4">{t('admin.aiAnalysis')}</h2>
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-2xl font-bold text-purple-600">{application.ai_score?.toFixed(0)}/100</span>
+                <h2 className="text-xl font-bold text-[#1a365d] mb-5">{t('admin.aiAnalysis')}</h2>
+                <div className="flex flex-col items-center mb-6">
+                  <div
+                    className={`w-28 h-28 rounded-full flex flex-col items-center justify-center shadow-md text-white font-bold ${
+                      application.ai_score >= 70
+                        ? 'bg-green-500'
+                        : application.ai_score >= 40
+                        ? 'bg-yellow-400'
+                        : 'bg-red-500'
+                    }`}
+                  >
+                    <span className="text-3xl leading-none">{Math.round(application.ai_score)}</span>
+                    <span className="text-sm font-normal opacity-90">/ 100</span>
+                  </div>
+                  <p className="mt-3 text-sm font-semibold text-gray-500 uppercase tracking-wide">
+                    {application.ai_score >= 70
+                      ? (i18n.language === 'ar' ? 'مؤهل للقائمة المختصرة' : 'Shortlisted')
+                      : application.ai_score >= 40
+                      ? (i18n.language === 'ar' ? 'قيد المراجعة' : 'Under Review')
+                      : (i18n.language === 'ar' ? 'غير مؤهل' : 'Rejected')}
+                  </p>
                 </div>
-                <p className="text-gray-700 whitespace-pre-wrap">{application.ai_analysis}</p>
+                {application.ai_analysis && (() => {
+                  const text = application.ai_analysis;
+                  const matchedMatch = text.match(/Matched: \[([^\]]*)\]/);
+                  const missingMatch = text.match(/Missing: \[([^\]]*)\]/);
+                  const matched = matchedMatch?.[1]?.split(',').map(s => s.trim()).filter(s => s && s !== 'None') ?? [];
+                  const missing = missingMatch?.[1]?.split(',').map(s => s.trim()).filter(s => s && s !== 'None') ?? [];
+                  const scoreLineMatch = text.match(/Score:.*?(?=Matched:|$)/s);
+                  const scoreLine = scoreLineMatch?.[0]?.trim() ?? '';
+                  return (
+                    <div className="space-y-4">
+                      {scoreLine && (
+                        <p className="text-gray-600 text-sm bg-gray-50 rounded-lg p-3 font-mono">{scoreLine}</p>
+                      )}
+                      {matched.length > 0 && (
+                        <div>
+                          <p className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">{t('admin.matchedCriteria')}</p>
+                          <ul className="space-y-1">
+                            {matched.map((item, i) => (
+                              <li key={i} className="flex items-center gap-2 text-green-700 text-sm">
+                                <span className="text-green-500 font-bold">✓</span> {item}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {missing.length > 0 && (
+                        <div>
+                          <p className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">{t('admin.missingCriteria')}</p>
+                          <ul className="space-y-1">
+                            {missing.map((item, i) => (
+                              <li key={i} className="flex items-center gap-2 text-red-600 text-sm">
+                                <span className="text-red-500 font-bold">✗</span> {item}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             )}
           </div>

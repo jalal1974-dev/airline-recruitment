@@ -4,9 +4,106 @@ import { useTranslation } from 'react-i18next';
 import { supabase, Application, Job } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { toast } from 'react-toastify';
-import { Brain } from 'lucide-react';
 import Navbar from '../../components/Navbar';
 import Footer from '../../components/Footer';
+
+const EDU_RANK: Record<string, number> = {
+  'high-school': 1,
+  diploma: 2,
+  bachelor: 3,
+  master: 4,
+  phd: 5,
+};
+
+interface AiResult {
+  id: string;
+  name: string;
+  score: number;
+  status: string;
+}
+
+function scoreApplication(app: Application, job: Job): {
+  score: number;
+  expScore: number;
+  eduScore: number;
+  skillScore: number;
+  salaryScore: number;
+  matchedSkills: string[];
+  missingSkills: string[];
+  newStatus: string;
+  analysis: string;
+} {
+  const minExp = job.ai_min_experience ?? 0;
+  const appExp = app.total_experience ?? 0;
+  let expScore: number;
+  if (!minExp || minExp === 0) {
+    expScore = 30;
+  } else if (appExp >= minExp) {
+    expScore = 30;
+  } else {
+    expScore = Math.round((appExp / minExp) * 30 * 10) / 10;
+  }
+
+  const reqEdu = job.ai_required_education;
+  let eduScore: number;
+  if (!reqEdu || reqEdu === 'any') {
+    eduScore = 25;
+  } else {
+    const appRank = EDU_RANK[app.highest_education || ''] ?? 0;
+    const reqRank = EDU_RANK[reqEdu] ?? 3;
+    const diff = appRank - reqRank;
+    if (diff >= 0) eduScore = 25;
+    else if (diff === -1) eduScore = 15;
+    else eduScore = 5;
+  }
+
+  const requiredSkills = job.ai_required_skills ?? [];
+  const appSkills = app.skills ?? [];
+  let skillScore: number;
+  const matchedSkills: string[] = [];
+  const missingSkills: string[] = [];
+  if (requiredSkills.length === 0) {
+    skillScore = 25;
+  } else {
+    requiredSkills.forEach((rs) => {
+      const found = appSkills.some(
+        (as) =>
+          as.toLowerCase().includes(rs.toLowerCase()) ||
+          rs.toLowerCase().includes(as.toLowerCase())
+      );
+      if (found) matchedSkills.push(rs);
+      else missingSkills.push(rs);
+    });
+    skillScore = Math.round((matchedSkills.length / requiredSkills.length) * 25 * 10) / 10;
+  }
+
+  const maxSalary = job.ai_max_salary ?? 0;
+  const appSalary = app.expected_salary ?? 0;
+  let salaryScore: number;
+  if (!maxSalary || maxSalary === 0) {
+    salaryScore = 20;
+  } else if (appSalary <= maxSalary) {
+    salaryScore = 20;
+  } else if (appSalary <= maxSalary * 1.2) {
+    salaryScore = 10;
+  } else {
+    salaryScore = 0;
+  }
+
+  const score = Math.round(expScore + eduScore + skillScore + salaryScore);
+
+  let newStatus: string;
+  if (score >= 70) newStatus = 'ai-shortlisted';
+  else if (score >= 40) newStatus = 'reviewing';
+  else newStatus = 'ai-rejected';
+
+  const matchedStr = matchedSkills.length > 0 ? matchedSkills.join(', ') : 'None';
+  const missingStr = missingSkills.length > 0 ? missingSkills.join(', ') : 'None';
+  const analysis =
+    `Score: ${score}/100. Experience: ${expScore}/30, Education: ${eduScore}/25, Skills: ${skillScore}/25, Salary: ${salaryScore}/20. Matched: [${matchedStr}]. Missing: [${missingStr}].`;
+
+  return { score, expScore, eduScore, skillScore, salaryScore, matchedSkills, missingSkills, newStatus, analysis };
+}
 
 export default function JobApplications() {
   const { t, i18n } = useTranslation();
@@ -18,6 +115,7 @@ export default function JobApplications() {
   const [dataLoading, setDataLoading] = useState(true);
   const [aiRunning, setAiRunning] = useState(false);
   const [statusFilter, setStatusFilter] = useState('');
+  const [aiResults, setAiResults] = useState<AiResult[] | null>(null);
 
   useEffect(() => {
     if (loading) return;
@@ -50,6 +148,49 @@ export default function JobApplications() {
     }
   }
 
+  async function runAiFilter() {
+    if (!job || !jobId) return;
+    setAiRunning(true);
+    setAiResults(null);
+    try {
+      const { data: pending, error } = await supabase
+        .from('applications')
+        .select('*')
+        .eq('job_id', jobId)
+        .eq('status', 'pending');
+      if (error) throw error;
+      if (!pending || pending.length === 0) {
+        toast.info(i18n.language === 'ar' ? 'لا توجد طلبات معلقة' : 'No pending applications to filter');
+        setAiRunning(false);
+        return;
+      }
+
+      const results: AiResult[] = [];
+      for (const app of pending) {
+        const { score, newStatus, analysis } = scoreApplication(app as Application, job);
+        const { error: updateError } = await supabase
+          .from('applications')
+          .update({ ai_score: score, ai_analysis: analysis, status: newStatus })
+          .eq('id', app.id);
+        if (updateError) console.error('Update error for', app.id, updateError);
+        results.push({ id: app.id, name: app.full_name_en, score, status: newStatus });
+      }
+
+      setAiResults(results);
+      toast.success(
+        i18n.language === 'ar'
+          ? `تم تصفية ${results.length} طلبات بنجاح`
+          : `${results.length} applications filtered`
+      );
+      await fetchApplications(jobId);
+    } catch (err) {
+      console.error('AI filter error:', err);
+      toast.error(i18n.language === 'ar' ? 'حدث خطأ أثناء التصفية' : 'Error running AI filter');
+    } finally {
+      setAiRunning(false);
+    }
+  }
+
   const getStatusColor = (status: string) => {
     const statusColors: { [key: string]: string } = {
       pending: 'bg-yellow-100 text-yellow-700',
@@ -67,6 +208,10 @@ export default function JobApplications() {
   const filteredApplications = statusFilter
     ? applications.filter(a => a.status === statusFilter)
     : applications;
+
+  const shortlistedCount = aiResults?.filter(r => r.status === 'ai-shortlisted').length ?? 0;
+  const reviewCount = aiResults?.filter(r => r.status === 'reviewing').length ?? 0;
+  const rejectedCount = aiResults?.filter(r => r.status === 'ai-rejected').length ?? 0;
 
   if (loading || dataLoading) {
     return (
@@ -95,14 +240,46 @@ export default function JobApplications() {
             {job && <p className="text-[#f6ad55] font-semibold mt-1">{i18n.language === 'ar' ? job.title_ar : job.title_en}</p>}
           </div>
           <button
-            onClick={() => toast.info('AI Filter feature requires Supabase Edge Functions configuration')}
+            onClick={runAiFilter}
             disabled={aiRunning}
-            className="flex items-center space-x-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition disabled:opacity-50"
+            className="flex items-center space-x-2 bg-[#f6ad55] text-[#1a365d] px-5 py-2.5 rounded-lg hover:bg-[#e09a3e] transition disabled:opacity-50 font-semibold text-base shadow"
           >
-            <Brain className="w-4 h-4" />
-            <span>{aiRunning ? t('admin.aiFilterRunning') : t('admin.aiFilter')}</span>
+            <span>{aiRunning ? t('admin.aiFiltering') : t('admin.aiFilter')}</span>
           </button>
         </div>
+
+        {aiResults && (
+          <div className="bg-white rounded-lg shadow-md p-6 mb-6 border-l-4 border-[#f6ad55]">
+            <h2 className="text-lg font-bold text-[#1a365d] mb-4">{t('admin.aiFilterResultsTitle')}</h2>
+            <div className="flex gap-6 mb-5">
+              <div className="flex items-center gap-2 text-teal-600 font-semibold">
+                <span className="text-xl">✅</span>
+                <span>{shortlistedCount} {i18n.language === 'ar' ? 'مختصر' : 'Shortlisted'}</span>
+              </div>
+              <div className="flex items-center gap-2 text-blue-600 font-semibold">
+                <span className="text-xl">⏳</span>
+                <span>{reviewCount} {i18n.language === 'ar' ? 'مراجعة' : 'Review'}</span>
+              </div>
+              <div className="flex items-center gap-2 text-orange-600 font-semibold">
+                <span className="text-xl">❌</span>
+                <span>{rejectedCount} {i18n.language === 'ar' ? 'مرفوض' : 'Rejected'}</span>
+              </div>
+            </div>
+            <div className="divide-y divide-gray-100">
+              {aiResults.map(r => (
+                <div key={r.id} className="py-2 flex items-center justify-between">
+                  <span className="text-gray-800 font-medium">{r.name}</span>
+                  <div className="flex items-center gap-3">
+                    <span className="font-bold text-[#1a365d]">{r.score}/100</span>
+                    <span className={`px-3 py-0.5 rounded-full text-xs font-semibold ${getStatusColor(r.status)}`}>
+                      {r.status}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="bg-white rounded-lg shadow-md p-4 mb-6">
           <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1a365d]">

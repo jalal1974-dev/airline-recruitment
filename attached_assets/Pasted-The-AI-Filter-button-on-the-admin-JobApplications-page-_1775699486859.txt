@@ -1,0 +1,84 @@
+The AI Filter button on the admin JobApplications page shows 
+"requires Supabase Edge Functions" error. Change it to use 
+CLIENT-SIDE rule-based scoring. No Edge Functions needed.
+
+When admin clicks "🤖 AI Filter" button:
+
+1. Get job filter criteria from the jobs table columns:
+   min_experience, required_skills, required_education, 
+   max_salary_expectation
+
+2. Get all PENDING applications for this job from Supabase
+
+3. Score each application (0-100) using this formula:
+
+   EXPERIENCE (30 points):
+   - applicant total_experience_years >= min_experience → 30
+   - else → (applicant_exp / min_experience) * 30
+   - if min_experience is 0 or null → 30
+
+   EDUCATION (25 points):
+   - rank: high-school=1, diploma=2, bachelor=3, master=4, phd=5
+   - applicant rank >= required rank → 25
+   - one level below → 15
+   - two+ levels below → 5
+   - if required is 'any' or null → 25
+
+   SKILLS (25 points):
+   - matched = count applicant skills that match required_skills
+   - compare case-insensitive, partial match OK
+   - score = (matched / total_required) * 25
+   - if no required skills → 25
+
+   SALARY (20 points):
+   - applicant expected_salary <= max_salary_expectation → 20
+   - within 120% of max → 10
+   - over 120% → 0
+   - if no max set or max is 0 → 20
+
+4. Determine recommendation:
+   score >= 70 → status "ai-shortlisted"
+   score 40-69 → status "reviewing"
+   score < 40 → status "ai-rejected"
+
+5. Generate analysis text:
+   "Score: X/100. Experience: X/30, Education: X/25, 
+    Skills: X/25, Salary: X/20.
+    Matched: [list]. Missing: [list]."
+
+6. Update each application in Supabase:
+   UPDATE applications SET 
+     ai_score = score,
+     ai_analysis = analysis text,
+     status = new status
+   WHERE id = application_id
+
+7. Show loading during processing:
+   "🤖 جاري التصفية..." / "🤖 AI Filtering..."
+
+8. After completion show results card:
+   "✅ X Shortlisted | ⏳ X Review | ❌ X Rejected"
+   List each application with name, score, recommendation
+
+9. Refresh applications table to show updated scores/statuses
+
+10. Show success toast:
+    "تم تصفية X طلبات بنجاح" / "X applications filtered"
+
+Implementation details:
+- All scoring happens in the browser (client-side JavaScript)
+- No Edge Functions, no external API calls
+- Read job criteria with: supabase.from('jobs').select('*').eq('id', jobId)
+- Read applications with: supabase.from('applications').select('*').eq('job_id', jobId).eq('status', 'pending')
+- Update with: supabase.from('applications').update({...}).eq('id', appId)
+- Button style: gold background (#f6ad55), large, with 🤖 icon
+- Bilingual labels in Arabic and English
+
+Also update ApplicationDetail admin page:
+- Show AI Score as large colored circle:
+  Green if >= 70, Yellow if >= 40, Red if < 40
+- Show AI Analysis text below score
+- Show "Matched Criteria" list with green checkmarks
+- Show "Missing Criteria" list with red X marks
+
+Don't change any other working features.
