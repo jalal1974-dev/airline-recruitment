@@ -98,6 +98,16 @@ export interface Application {
   admin_notes: string | null;
   applied_at: string;
   updated_at: string;
+  marital_status: string | null;
+  height_cm: number | null;
+  weight_kg: number | null;
+  religion: string | null;
+  national_id: string | null;
+  passport_number: string | null;
+  full_address: FullAddress | null;
+  additional_questions: AdditionalQuestions | null;
+  references_list: ReferenceEntry[] | null;
+  expected_joining_date: string | null;
 }
 
 export interface EducationEntry {
@@ -115,6 +125,39 @@ export interface ExperienceEntry {
   end_date: string;
   current: boolean;
   description: string;
+  reason_for_leaving: string;
+  manager_name: string;
+  manager_email: string;
+  manager_phone: string;
+}
+
+export interface ReferenceEntry {
+  name: string;
+  phone: string;
+  relationship: string;
+  company: string;
+}
+
+export interface FullAddress {
+  country: string;
+  city: string;
+  area: string;
+  street: string;
+  building: string;
+  postal_code: string;
+}
+
+export interface AdditionalQuestions {
+  can_work_shifts: boolean;
+  can_work_overtime: boolean;
+  can_work_outside_jordan: boolean;
+  has_car: boolean;
+  has_driving_license: boolean;
+  license_category: string;
+  is_smoker: boolean;
+  has_chronic_diseases: boolean;
+  medical_status_details: string;
+  expected_joining_date: string;
 }
 
 export interface LanguageEntry {

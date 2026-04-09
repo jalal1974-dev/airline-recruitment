@@ -47,7 +47,7 @@ export default function ApplicationDetail() {
       const { error } = await supabase.from('applications').update({ status }).eq('id', id!);
       if (error) throw error;
       toast.success('Status updated');
-    } catch (error) {
+    } catch {
       toast.error('Failed to update status');
     }
   }
@@ -57,13 +57,15 @@ export default function ApplicationDetail() {
       const { error } = await supabase.from('applications').update({ admin_notes: adminNotes }).eq('id', id!);
       if (error) throw error;
       toast.success('Notes saved');
-    } catch (error) {
+    } catch {
       toast.error('Failed to save notes');
     }
   }
 
   const labelClass = "text-sm font-semibold text-gray-500 uppercase tracking-wide";
   const valueClass = "text-gray-900 mt-1";
+
+  const yesNo = (v: boolean | undefined | null) => v ? t('application.yes') : t('application.no');
 
   if (loading || dataLoading) {
     return (
@@ -87,6 +89,9 @@ export default function ApplicationDetail() {
     );
   }
 
+  const aq = application.additional_questions;
+  const addr = application.full_address;
+
   return (
     <div className="min-h-screen bg-[#f7f8fc] flex flex-col">
       <Navbar />
@@ -100,6 +105,8 @@ export default function ApplicationDetail() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
+
+            {/* Personal Information */}
             <div className="bg-white rounded-lg shadow-md p-6">
               <h2 className="text-xl font-bold text-[#1a365d] mb-4">{t('admin.personalInfo')}</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -110,11 +117,34 @@ export default function ApplicationDetail() {
                 {application.nationality && <div><p className={labelClass}>{t('admin.nationality')}</p><p className={valueClass}>{application.nationality}</p></div>}
                 {application.gender && <div><p className={labelClass}>{t('admin.gender')}</p><p className={valueClass}>{application.gender}</p></div>}
                 {application.date_of_birth && <div><p className={labelClass}>{t('admin.dateOfBirth')}</p><p className={valueClass}>{new Date(application.date_of_birth).toLocaleDateString()}</p></div>}
+                {application.marital_status && <div><p className={labelClass}>{t('admin.maritalStatus')}</p><p className={valueClass}>{application.marital_status}</p></div>}
+                {application.height_cm != null && <div><p className={labelClass}>{t('admin.height')}</p><p className={valueClass}>{application.height_cm} cm</p></div>}
+                {application.weight_kg != null && <div><p className={labelClass}>{t('admin.weight')}</p><p className={valueClass}>{application.weight_kg} kg</p></div>}
+                {application.religion && <div><p className={labelClass}>{t('admin.religion')}</p><p className={valueClass}>{application.religion}</p></div>}
+                {application.national_id && <div><p className={labelClass}>{t('admin.nationalId')}</p><p className={valueClass}>{application.national_id}</p></div>}
+                {application.passport_number && <div><p className={labelClass}>{t('admin.passportNumber')}</p><p className={valueClass}>{application.passport_number}</p></div>}
                 <div><p className={labelClass}>{t('admin.totalExperience')}</p><p className={valueClass}>{application.total_experience} years</p></div>
                 <div><p className={labelClass}>{t('admin.expectedSalary')}</p><p className={valueClass}>{application.expected_salary.toLocaleString()} {application.salary_currency}</p></div>
+                {application.expected_joining_date && <div><p className={labelClass}>{t('admin.expectedJoiningDate')}</p><p className={valueClass}>{new Date(application.expected_joining_date).toLocaleDateString()}</p></div>}
               </div>
             </div>
 
+            {/* Full Address */}
+            {addr && (addr.country || addr.city || addr.street) && (
+              <div className="bg-white rounded-lg shadow-md p-6">
+                <h2 className="text-xl font-bold text-[#1a365d] mb-4">{t('admin.fullAddress')}</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {addr.country && <div><p className={labelClass}>{t('application.country')}</p><p className={valueClass}>{addr.country}</p></div>}
+                  {addr.city && <div><p className={labelClass}>{t('application.city')}</p><p className={valueClass}>{addr.city}</p></div>}
+                  {addr.area && <div><p className={labelClass}>{t('application.area')}</p><p className={valueClass}>{addr.area}</p></div>}
+                  {addr.street && <div><p className={labelClass}>{t('application.street')}</p><p className={valueClass}>{addr.street}</p></div>}
+                  {addr.building && <div><p className={labelClass}>{t('application.building')}</p><p className={valueClass}>{addr.building}</p></div>}
+                  {addr.postal_code && <div><p className={labelClass}>{t('application.postalCode')}</p><p className={valueClass}>{addr.postal_code}</p></div>}
+                </div>
+              </div>
+            )}
+
+            {/* Education */}
             {application.education?.length > 0 && (
               <div className="bg-white rounded-lg shadow-md p-6">
                 <h2 className="text-xl font-bold text-[#1a365d] mb-4">{t('admin.education')}</h2>
@@ -130,21 +160,36 @@ export default function ApplicationDetail() {
               </div>
             )}
 
+            {/* Work Experience */}
             {application.experience?.length > 0 && (
               <div className="bg-white rounded-lg shadow-md p-6">
                 <h2 className="text-xl font-bold text-[#1a365d] mb-4">{t('admin.experience')}</h2>
-                <div className="space-y-3">
+                <div className="space-y-4">
                   {application.experience.map((exp, i) => (
-                    <div key={i} className="border border-gray-100 rounded-lg p-3">
+                    <div key={i} className="border border-gray-100 rounded-lg p-4">
                       <p className="font-semibold text-[#1a365d]">{exp.title}</p>
                       <p className="text-gray-600 text-sm">{exp.company} · {exp.start_date} - {exp.current ? 'Present' : exp.end_date}</p>
                       {exp.description && <p className="text-gray-500 text-sm mt-1">{exp.description}</p>}
+                      {exp.reason_for_leaving && (
+                        <div className="mt-2 pt-2 border-t border-gray-100">
+                          <p className="text-xs text-gray-500 font-semibold uppercase">{t('admin.reasonForLeaving')}</p>
+                          <p className="text-gray-700 text-sm">{exp.reason_for_leaving}</p>
+                        </div>
+                      )}
+                      {(exp.manager_name || exp.manager_email || exp.manager_phone) && (
+                        <div className="mt-2 pt-2 border-t border-gray-100 grid grid-cols-1 md:grid-cols-3 gap-2">
+                          {exp.manager_name && <div><p className="text-xs text-gray-500 font-semibold uppercase">{t('admin.managerName')}</p><p className="text-gray-700 text-sm">{exp.manager_name}</p></div>}
+                          {exp.manager_email && <div><p className="text-xs text-gray-500 font-semibold uppercase">{t('admin.managerEmail')}</p><p className="text-gray-700 text-sm">{exp.manager_email}</p></div>}
+                          {exp.manager_phone && <div><p className="text-xs text-gray-500 font-semibold uppercase">{t('admin.managerPhone')}</p><p className="text-gray-700 text-sm">{exp.manager_phone}</p></div>}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
               </div>
             )}
 
+            {/* Skills */}
             {application.skills?.length > 0 && (
               <div className="bg-white rounded-lg shadow-md p-6">
                 <h2 className="text-xl font-bold text-[#1a365d] mb-4">{t('admin.skills')}</h2>
@@ -156,6 +201,52 @@ export default function ApplicationDetail() {
               </div>
             )}
 
+            {/* Additional Questions */}
+            {aq && (
+              <div className="bg-white rounded-lg shadow-md p-6">
+                <h2 className="text-xl font-bold text-[#1a365d] mb-4">{t('admin.additionalQuestions')}</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+                  <div><p className={labelClass}>{t('application.canWorkShifts')}</p><p className={valueClass}>{yesNo(aq.can_work_shifts)}</p></div>
+                  <div><p className={labelClass}>{t('application.canWorkOvertime')}</p><p className={valueClass}>{yesNo(aq.can_work_overtime)}</p></div>
+                  <div><p className={labelClass}>{t('application.canWorkOutsideJordan')}</p><p className={valueClass}>{yesNo(aq.can_work_outside_jordan)}</p></div>
+                  <div><p className={labelClass}>{t('application.hasCar')}</p><p className={valueClass}>{yesNo(aq.has_car)}</p></div>
+                  <div>
+                    <p className={labelClass}>{t('application.hasDrivingLicense')}</p>
+                    <p className={valueClass}>{yesNo(aq.has_driving_license)}{aq.has_driving_license && aq.license_category ? ` — Category ${aq.license_category}` : ''}</p>
+                  </div>
+                  <div><p className={labelClass}>{t('application.isSmoker')}</p><p className={valueClass}>{yesNo(aq.is_smoker)}</p></div>
+                  <div className="md:col-span-2">
+                    <p className={labelClass}>{t('application.hasChronicDiseases')}</p>
+                    <p className={valueClass}>{yesNo(aq.has_chronic_diseases)}</p>
+                    {aq.has_chronic_diseases && aq.medical_status_details && (
+                      <p className="text-gray-700 text-sm mt-1 bg-yellow-50 rounded p-2">{aq.medical_status_details}</p>
+                    )}
+                  </div>
+                  {aq.expected_joining_date && (
+                    <div><p className={labelClass}>{t('admin.expectedJoiningDate')}</p><p className={valueClass}>{new Date(aq.expected_joining_date).toLocaleDateString()}</p></div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* References */}
+            {application.references_list && application.references_list.length > 0 && (
+              <div className="bg-white rounded-lg shadow-md p-6">
+                <h2 className="text-xl font-bold text-[#1a365d] mb-4">{t('admin.references')}</h2>
+                <div className="space-y-3">
+                  {application.references_list.map((ref, i) => (
+                    <div key={i} className="border border-gray-100 rounded-lg p-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div><p className={labelClass}>{t('application.referenceName')}</p><p className={valueClass}>{ref.name}</p></div>
+                      <div><p className={labelClass}>{t('application.referencePhone')}</p><p className={valueClass}>{ref.phone}</p></div>
+                      {ref.relationship && <div><p className={labelClass}>{t('application.referenceRelationship')}</p><p className={valueClass}>{ref.relationship}</p></div>}
+                      {ref.company && <div><p className={labelClass}>{t('application.referenceCompany')}</p><p className={valueClass}>{ref.company}</p></div>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Documents */}
             {(application.resume_url || application.documents) && (
               <div className="bg-white rounded-lg shadow-md p-6">
                 <h2 className="text-xl font-bold text-[#1a365d] mb-4">{t('application.documents')}</h2>
@@ -207,6 +298,7 @@ export default function ApplicationDetail() {
               </div>
             )}
 
+            {/* Cover Letter */}
             {application.cover_letter && (
               <div className="bg-white rounded-lg shadow-md p-6">
                 <h2 className="text-xl font-bold text-[#1a365d] mb-4">{t('admin.coverLetter')}</h2>
@@ -214,6 +306,7 @@ export default function ApplicationDetail() {
               </div>
             )}
 
+            {/* AI Analysis */}
             {application.ai_analysis && (
               <div className="bg-white rounded-lg shadow-md p-6">
                 <h2 className="text-xl font-bold text-[#1a365d] mb-4">{t('admin.aiAnalysis')}</h2>
@@ -225,6 +318,7 @@ export default function ApplicationDetail() {
             )}
           </div>
 
+          {/* Sidebar */}
           <div className="space-y-6">
             <div className="bg-white rounded-lg shadow-md p-6">
               <h2 className="text-xl font-bold text-[#1a365d] mb-4">{t('admin.updateStatus')}</h2>

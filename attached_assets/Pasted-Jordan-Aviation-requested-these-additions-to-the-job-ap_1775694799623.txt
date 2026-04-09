@@ -1,0 +1,164 @@
+Jordan Aviation requested these additions to the job application form.
+Update the ApplicationForm.tsx to add all these new fields.
+Also update the Supabase applications table and i18n translations.
+
+=== SECTION 1: UPDATE PERSONAL INFORMATION ===
+
+Add these fields AFTER gender in the Personal Information section:
+
+1. Marital Status (الحالة الاجتماعية) - Required dropdown:
+   - Single (أعزب/عزباء)
+   - Married (متزوج/متزوجة)
+   - Divorced (مطلق/مطلقة)
+   - Widowed (أرمل/أرملة)
+
+2. Height in CM (الطول بالسنتيمتر) - Number input, required
+
+3. Weight in KG (الوزن بالكيلوغرام) - Number input, required
+
+4. Religion (الديانة) - Dropdown:
+   - Muslim (مسلم)
+   - Christian (مسيحي)
+   - Other (أخرى)
+
+5. National ID Number (الرقم الوطني) - Text input
+   Label: "الرقم الوطني (للأردنيين)" / "National ID (for Jordanians)"
+
+6. Passport Number (رقم جواز السفر) - Text input
+   Label: "رقم جواز السفر (لغير الأردنيين)" / "Passport Number (for non-Jordanians)"
+
+7. Full Current Address (العنوان الحالي الكامل) - Replace simple address with:
+   - Country (البلد) - Text input
+   - City (المدينة) - Text input
+   - Area/District (المنطقة/الحي) - Text input
+   - Street (الشارع) - Text input
+   - Building/House Number (رقم المبنى/المنزل) - Text input
+   - Postal Code (الرمز البريدي) - Text input
+
+=== SECTION 2: UPDATE WORK EXPERIENCE ===
+
+Add these fields to EACH work experience entry:
+
+1. Reason for Leaving (سبب ترك العمل) - Text input
+   Label: "سبب ترك العمل" / "Reason for Leaving"
+
+2. Direct Manager Name (اسم المدير المباشر) - Text input
+   Label: "اسم المدير المباشر" / "Direct Manager Name"
+
+3. Manager Email (البريد الإلكتروني للمدير) - Email input
+   Label: "البريد الإلكتروني للمدير" / "Manager Email"
+
+4. Manager Phone (هاتف المدير) - Text input
+   Label: "هاتف المدير" / "Manager Phone Number"
+
+=== SECTION 3: NEW SECTION - ADDITIONAL QUESTIONS ===
+
+Create a NEW section AFTER Languages and BEFORE Salary Information.
+Section title: "أسئلة إضافية" / "Additional Questions"
+
+All Yes/No questions should be toggle/radio buttons with (نعم/لا).
+
+1. Ability to work shifts (القدرة على العمل بنظام الورديات):
+   "هل يمكنك العمل في ورديات مسائية/ليلية؟"
+   "Can you work evening/night shifts?"
+   → Yes (نعم) / No (لا)
+
+2. Ability to work overtime (القدرة على العمل الإضافي):
+   "هل يمكنك العمل ساعات إضافية؟"
+   "Can you work overtime?"
+   → Yes (نعم) / No (لا)
+
+3. Ability to work outside Jordan (القدرة على العمل خارج الأردن):
+   "هل يمكنك العمل خارج الأردن؟"
+   "Can you work outside Jordan?"
+   → Yes (نعم) / No (لا)
+
+4. Do you have a car? (هل تمتلك سيارة؟):
+   → Yes (نعم) / No (لا)
+
+5. Do you have a driving license? (هل تمتلك رخصة قيادة؟):
+   → Yes (نعم) / No (لا)
+   IF YES: show "License Category" dropdown (فئة الرخصة):
+   - Category A (فئة أ)
+   - Category B (فئة ب)
+   - Category C (فئة ج)
+   - Category D (فئة د)
+   - Category E (فئة هـ)
+
+6. Are you a smoker? (هل أنت مدخن؟):
+   → Yes (نعم) / No (لا)
+
+7. Do you suffer from chronic diseases? (هل تعاني من أمراض مزمنة؟):
+   → Yes (نعم) / No (لا)
+   IF YES: show textarea "Medical Status Details" (تفاصيل الحالة الصحية):
+   "يرجى ذكر تفاصيل الحالة الصحية"
+   "Please mention medical status details"
+
+8. Expected Joining Date (تاريخ الالتحاق المتوقع):
+   Date picker input
+   Label: "تاريخ الالتحاق المتوقع" / "Expected Joining Date"
+
+=== SECTION 4: NEW SECTION - REFERENCES ===
+
+Create a NEW section AFTER Additional Questions and BEFORE Documents.
+Section title: "المراجع" / "References"
+Subtitle: "الحد الأدنى مرجعين" / "Minimum 2 references required"
+
+Start with 2 reference entries by default. Allow adding more.
+
+Each reference entry has:
+1. Reference Name (اسم المرجع) - Text input, required
+2. Reference Phone (رقم هاتف المرجع) - Text input, required
+3. Reference Relationship (العلاقة) - Text input (e.g., "Former Manager")
+4. Reference Company (الشركة) - Text input
+
+Button: "+ إضافة مرجع" / "+ Add Reference"
+Minimum 2 references required for form submission.
+
+=== UPDATED FORM SECTION ORDER ===
+
+1. Personal Information (المعلومات الشخصية) - UPDATED
+2. Education (التعليم)
+3. Work Experience (الخبرة العملية) - UPDATED
+4. Skills (المهارات)
+5. Languages (اللغات)
+6. Additional Questions (أسئلة إضافية) - NEW
+7. References (المراجع) - NEW
+8. Salary Information (معلومات الراتب)
+9. Documents (الوثائق)
+10. Submit Button (إرسال الطلب)
+
+=== DATABASE CHANGES ===
+
+Add these columns to the applications table in Supabase:
+
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS marital_status text DEFAULT '';
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS height_cm numeric DEFAULT 0;
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS weight_kg numeric DEFAULT 0;
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS religion text DEFAULT '';
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS national_id text DEFAULT '';
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS passport_number text DEFAULT '';
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS full_address jsonb DEFAULT '{}';
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS additional_questions jsonb DEFAULT '{}';
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS references_list jsonb DEFAULT '[]';
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS expected_joining_date date;
+
+=== I18N TRANSLATIONS ===
+
+Add ALL new field labels to both en.json and ar.json translation files.
+Every label must have Arabic and English versions.
+
+=== ADMIN APPLICATION DETAIL ===
+
+Update the admin ApplicationDetail page to display ALL new fields:
+- Show marital status, height, weight, religion
+- Show national ID or passport number
+- Show full address details
+- Show all additional questions with answers
+- Show references list with names and phones
+- Show expected joining date
+- All in organized card sections with proper labels
+
+Don't change any existing working features. Only ADD the new fields.
+Make sure form still submits successfully after changes.
+Test with all new fields filled in.

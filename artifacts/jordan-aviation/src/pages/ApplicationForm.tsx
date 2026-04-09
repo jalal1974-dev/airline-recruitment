@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { supabase, Job, EducationEntry, ExperienceEntry, LanguageEntry } from '../lib/supabase';
+import { supabase, Job, EducationEntry, ExperienceEntry, LanguageEntry, ReferenceEntry, FullAddress, AdditionalQuestions } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { toast } from 'react-toastify';
 import { Plus, Trash2, Upload, X, FileText } from 'lucide-react';
@@ -108,6 +108,36 @@ function FileUploadField({
   );
 }
 
+function YesNoToggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
+  const { t } = useTranslation();
+  return (
+    <div className="flex gap-2">
+      <button
+        type="button"
+        onClick={() => onChange(true)}
+        className={`px-5 py-2 rounded-lg border font-medium text-sm transition ${value ? 'bg-[#1a365d] text-white border-[#1a365d]' : 'bg-white text-gray-600 border-gray-300 hover:border-[#1a365d]'}`}
+      >
+        {t('application.yes')}
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange(false)}
+        className={`px-5 py-2 rounded-lg border font-medium text-sm transition ${!value ? 'bg-[#1a365d] text-white border-[#1a365d]' : 'bg-white text-gray-600 border-gray-300 hover:border-[#1a365d]'}`}
+      >
+        {t('application.no')}
+      </button>
+    </div>
+  );
+}
+
+const emptyAddress = (): FullAddress => ({ country: '', city: '', area: '', street: '', building: '', postal_code: '' });
+const emptyAdditional = (): AdditionalQuestions => ({
+  can_work_shifts: false, can_work_overtime: false, can_work_outside_jordan: false,
+  has_car: false, has_driving_license: false, license_category: '',
+  is_smoker: false, has_chronic_diseases: false, medical_status_details: '', expected_joining_date: '',
+});
+const emptyReference = (): ReferenceEntry => ({ name: '', phone: '', relationship: '', company: '' });
+
 export default function ApplicationForm() {
   const { t, i18n } = useTranslation();
   const { jobId } = useParams<{ jobId: string }>();
@@ -125,8 +155,12 @@ export default function ApplicationForm() {
     nationality: profile?.nationality || '',
     date_of_birth: '',
     gender: '',
-    address_en: '',
-    address_ar: '',
+    marital_status: '',
+    height_cm: '' as string | number,
+    weight_kg: '' as string | number,
+    religion: '',
+    national_id: '',
+    passport_number: '',
     cover_letter: '',
     total_experience: 0,
     highest_education: 'bachelor',
@@ -137,6 +171,10 @@ export default function ApplicationForm() {
     experience: [] as ExperienceEntry[],
     languages: [] as LanguageEntry[],
   });
+
+  const [fullAddress, setFullAddress] = useState<FullAddress>(emptyAddress());
+  const [additionalQuestions, setAdditionalQuestions] = useState<AdditionalQuestions>(emptyAdditional());
+  const [references, setReferences] = useState<ReferenceEntry[]>([emptyReference(), emptyReference()]);
   const [newSkill, setNewSkill] = useState('');
 
   const [resumeFiles, setResumeFiles] = useState<FileEntry[]>([]);
@@ -211,6 +249,11 @@ export default function ApplicationForm() {
       return;
     }
 
+    if (references.length < 2 || references.some(r => !r.name.trim() || !r.phone.trim())) {
+      toast.error(t('application.referencesMinError'));
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -247,8 +290,8 @@ export default function ApplicationForm() {
         nationality: formData.nationality,
         date_of_birth: formData.date_of_birth || null,
         gender: formData.gender || null,
-        address_en: formData.address_en || null,
-        address_ar: formData.address_ar || null,
+        address_en: null,
+        address_ar: null,
         cover_letter: formData.cover_letter || null,
         total_experience: formData.total_experience,
         highest_education: formData.highest_education,
@@ -262,9 +305,17 @@ export default function ApplicationForm() {
         documents,
         status: 'pending',
         applied_at: new Date().toISOString(),
+        marital_status: formData.marital_status || null,
+        height_cm: formData.height_cm !== '' ? Number(formData.height_cm) : null,
+        weight_kg: formData.weight_kg !== '' ? Number(formData.weight_kg) : null,
+        religion: formData.religion || null,
+        national_id: formData.national_id || null,
+        passport_number: formData.passport_number || null,
+        full_address: fullAddress,
+        additional_questions: additionalQuestions,
+        references_list: references,
+        expected_joining_date: additionalQuestions.expected_joining_date || null,
       };
-
-      console.log('Submitting application:', applicationData);
 
       const { error } = await supabase.from('applications').insert(applicationData);
 
@@ -294,7 +345,7 @@ export default function ApplicationForm() {
     setFormData({ ...formData, education: edu });
   };
 
-  const addExperience = () => setFormData({ ...formData, experience: [...formData.experience, { title: '', company: '', start_date: '', end_date: '', current: false, description: '' }] });
+  const addExperience = () => setFormData({ ...formData, experience: [...formData.experience, { title: '', company: '', start_date: '', end_date: '', current: false, description: '', reason_for_leaving: '', manager_name: '', manager_email: '', manager_phone: '' }] });
   const removeExperience = (i: number) => setFormData({ ...formData, experience: formData.experience.filter((_, idx) => idx !== i) });
   const updateExperience = (i: number, field: keyof ExperienceEntry, value: string | boolean) => {
     const exp = [...formData.experience];
@@ -318,8 +369,23 @@ export default function ApplicationForm() {
   };
   const removeSkill = (i: number) => setFormData({ ...formData, skills: formData.skills.filter((_, idx) => idx !== i) });
 
+  const addReference = () => setReferences([...references, emptyReference()]);
+  const removeReference = (i: number) => setReferences(references.filter((_, idx) => idx !== i));
+  const updateReference = (i: number, field: keyof ReferenceEntry, value: string) => {
+    const refs = [...references];
+    refs[i] = { ...refs[i], [field]: value };
+    setReferences(refs);
+  };
+
+  const updateAddress = (field: keyof FullAddress, value: string) =>
+    setFullAddress((prev) => ({ ...prev, [field]: value }));
+
+  const updateAdditional = (field: keyof AdditionalQuestions, value: boolean | string) =>
+    setAdditionalQuestions((prev) => ({ ...prev, [field]: value }));
+
   const inputClass = 'w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1a365d]';
   const labelClass = 'block text-sm font-medium text-gray-700 mb-1';
+  const questionRowClass = 'flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 py-4 border-b border-gray-100 last:border-0';
 
   return (
     <div className="min-h-screen bg-[#f7f8fc] flex flex-col">
@@ -333,6 +399,7 @@ export default function ApplicationForm() {
         )}
         <form onSubmit={handleSubmit} className="space-y-8">
 
+          {/* 1. Personal Information */}
           <section className="bg-white rounded-lg shadow-md p-6">
             <h2 className="text-xl font-bold text-[#1a365d] mb-4">{t('application.personalInfo')}</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -342,16 +409,66 @@ export default function ApplicationForm() {
               <div><label className={labelClass}>{t('auth.phone')} *</label><input type="tel" required value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} className={inputClass} /></div>
               <div><label className={labelClass}>{t('auth.nationality')}</label><input type="text" value={formData.nationality} onChange={(e) => setFormData({ ...formData, nationality: e.target.value })} className={inputClass} /></div>
               <div><label className={labelClass}>{t('application.dateOfBirth')}</label><input type="date" value={formData.date_of_birth} onChange={(e) => setFormData({ ...formData, date_of_birth: e.target.value })} className={inputClass} /></div>
-              <div><label className={labelClass}>{t('application.gender')}</label>
+              <div>
+                <label className={labelClass}>{t('application.gender')}</label>
                 <select value={formData.gender} onChange={(e) => setFormData({ ...formData, gender: e.target.value })} className={inputClass}>
                   <option value="">-</option>
                   <option value="male">{t('application.male')}</option>
                   <option value="female">{t('application.female')}</option>
                 </select>
               </div>
+              <div>
+                <label className={labelClass}>{t('application.maritalStatus')} *</label>
+                <select required value={formData.marital_status} onChange={(e) => setFormData({ ...formData, marital_status: e.target.value })} className={inputClass}>
+                  <option value="">-</option>
+                  <option value="single">{t('application.single')}</option>
+                  <option value="married">{t('application.married')}</option>
+                  <option value="divorced">{t('application.divorced')}</option>
+                  <option value="widowed">{t('application.widowed')}</option>
+                </select>
+              </div>
+              <div>
+                <label className={labelClass}>{t('application.heightCm')} *</label>
+                <input type="number" required min="100" max="250" value={formData.height_cm} onChange={(e) => setFormData({ ...formData, height_cm: e.target.value })} className={inputClass} placeholder="e.g. 175" />
+              </div>
+              <div>
+                <label className={labelClass}>{t('application.weightKg')} *</label>
+                <input type="number" required min="30" max="300" value={formData.weight_kg} onChange={(e) => setFormData({ ...formData, weight_kg: e.target.value })} className={inputClass} placeholder="e.g. 70" />
+              </div>
+              <div>
+                <label className={labelClass}>{t('application.religion')}</label>
+                <select value={formData.religion} onChange={(e) => setFormData({ ...formData, religion: e.target.value })} className={inputClass}>
+                  <option value="">-</option>
+                  <option value="muslim">{t('application.muslim')}</option>
+                  <option value="christian">{t('application.christian')}</option>
+                  <option value="other">{t('application.otherReligion')}</option>
+                </select>
+              </div>
+              <div>
+                <label className={labelClass}>{t('application.nationalId')}</label>
+                <input type="text" value={formData.national_id} onChange={(e) => setFormData({ ...formData, national_id: e.target.value })} className={inputClass} />
+              </div>
+              <div>
+                <label className={labelClass}>{t('application.passportNumber')}</label>
+                <input type="text" value={formData.passport_number} onChange={(e) => setFormData({ ...formData, passport_number: e.target.value })} className={inputClass} />
+              </div>
+            </div>
+
+            {/* Full Address */}
+            <div className="mt-6">
+              <h3 className="text-base font-semibold text-[#1a365d] mb-3">{t('application.fullAddress')}</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div><label className={labelClass}>{t('application.country')}</label><input type="text" value={fullAddress.country} onChange={(e) => updateAddress('country', e.target.value)} className={inputClass} /></div>
+                <div><label className={labelClass}>{t('application.city')}</label><input type="text" value={fullAddress.city} onChange={(e) => updateAddress('city', e.target.value)} className={inputClass} /></div>
+                <div><label className={labelClass}>{t('application.area')}</label><input type="text" value={fullAddress.area} onChange={(e) => updateAddress('area', e.target.value)} className={inputClass} /></div>
+                <div><label className={labelClass}>{t('application.street')}</label><input type="text" value={fullAddress.street} onChange={(e) => updateAddress('street', e.target.value)} className={inputClass} /></div>
+                <div><label className={labelClass}>{t('application.building')}</label><input type="text" value={fullAddress.building} onChange={(e) => updateAddress('building', e.target.value)} className={inputClass} /></div>
+                <div><label className={labelClass}>{t('application.postalCode')}</label><input type="text" value={fullAddress.postal_code} onChange={(e) => updateAddress('postal_code', e.target.value)} className={inputClass} /></div>
+              </div>
             </div>
           </section>
 
+          {/* 2. Education */}
           <section className="bg-white rounded-lg shadow-md p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-bold text-[#1a365d]">{t('application.education')}</h2>
@@ -373,6 +490,7 @@ export default function ApplicationForm() {
             ))}
           </section>
 
+          {/* 3. Work Experience */}
           <section className="bg-white rounded-lg shadow-md p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-bold text-[#1a365d]">{t('application.experience')}</h2>
@@ -388,15 +506,21 @@ export default function ApplicationForm() {
                   <div><label className={labelClass}>{t('application.company')}</label><input type="text" value={exp.company} onChange={(e) => updateExperience(i, 'company', e.target.value)} className={inputClass} /></div>
                   <div><label className={labelClass}>{t('application.startDate')}</label><input type="date" value={exp.start_date} onChange={(e) => updateExperience(i, 'start_date', e.target.value)} className={inputClass} /></div>
                   {!exp.current && <div><label className={labelClass}>{t('application.endDate')}</label><input type="date" value={exp.end_date} onChange={(e) => updateExperience(i, 'end_date', e.target.value)} className={inputClass} /></div>}
-                  <div className="flex items-center space-x-2">
+                  <div className="flex items-center space-x-2 md:col-span-2">
                     <input type="checkbox" checked={exp.current} onChange={(e) => updateExperience(i, 'current', e.target.checked)} className="w-4 h-4" />
                     <label className="text-sm text-gray-700">{t('application.currentlyWorking')}</label>
                   </div>
+                  <div><label className={labelClass}>{t('application.jobDescription')}</label><input type="text" value={exp.description} onChange={(e) => updateExperience(i, 'description', e.target.value)} className={inputClass} /></div>
+                  <div><label className={labelClass}>{t('application.reasonForLeaving')}</label><input type="text" value={exp.reason_for_leaving} onChange={(e) => updateExperience(i, 'reason_for_leaving', e.target.value)} className={inputClass} /></div>
+                  <div><label className={labelClass}>{t('application.managerName')}</label><input type="text" value={exp.manager_name} onChange={(e) => updateExperience(i, 'manager_name', e.target.value)} className={inputClass} /></div>
+                  <div><label className={labelClass}>{t('application.managerEmail')}</label><input type="email" value={exp.manager_email} onChange={(e) => updateExperience(i, 'manager_email', e.target.value)} className={inputClass} /></div>
+                  <div><label className={labelClass}>{t('application.managerPhone')}</label><input type="tel" value={exp.manager_phone} onChange={(e) => updateExperience(i, 'manager_phone', e.target.value)} className={inputClass} /></div>
                 </div>
               </div>
             ))}
           </section>
 
+          {/* 4. Skills */}
           <section className="bg-white rounded-lg shadow-md p-6">
             <h2 className="text-xl font-bold text-[#1a365d] mb-4">{t('application.skills')}</h2>
             <div className="flex gap-2 mb-4">
@@ -413,6 +537,7 @@ export default function ApplicationForm() {
             </div>
           </section>
 
+          {/* 5. Languages */}
           <section className="bg-white rounded-lg shadow-md p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-bold text-[#1a365d]">{t('application.languages')}</h2>
@@ -436,6 +561,105 @@ export default function ApplicationForm() {
             ))}
           </section>
 
+          {/* 6. Additional Questions */}
+          <section className="bg-white rounded-lg shadow-md p-6">
+            <h2 className="text-xl font-bold text-[#1a365d] mb-4">{t('application.additionalQuestions')}</h2>
+            <div>
+              <div className={questionRowClass}>
+                <span className="text-sm font-medium text-gray-700">{t('application.canWorkShifts')}</span>
+                <YesNoToggle value={additionalQuestions.can_work_shifts} onChange={(v) => updateAdditional('can_work_shifts', v)} />
+              </div>
+              <div className={questionRowClass}>
+                <span className="text-sm font-medium text-gray-700">{t('application.canWorkOvertime')}</span>
+                <YesNoToggle value={additionalQuestions.can_work_overtime} onChange={(v) => updateAdditional('can_work_overtime', v)} />
+              </div>
+              <div className={questionRowClass}>
+                <span className="text-sm font-medium text-gray-700">{t('application.canWorkOutsideJordan')}</span>
+                <YesNoToggle value={additionalQuestions.can_work_outside_jordan} onChange={(v) => updateAdditional('can_work_outside_jordan', v)} />
+              </div>
+              <div className={questionRowClass}>
+                <span className="text-sm font-medium text-gray-700">{t('application.hasCar')}</span>
+                <YesNoToggle value={additionalQuestions.has_car} onChange={(v) => updateAdditional('has_car', v)} />
+              </div>
+              <div className={questionRowClass}>
+                <span className="text-sm font-medium text-gray-700">{t('application.hasDrivingLicense')}</span>
+                <div className="flex flex-col gap-2">
+                  <YesNoToggle value={additionalQuestions.has_driving_license} onChange={(v) => updateAdditional('has_driving_license', v)} />
+                  {additionalQuestions.has_driving_license && (
+                    <select
+                      value={additionalQuestions.license_category}
+                      onChange={(e) => updateAdditional('license_category', e.target.value)}
+                      className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1a365d] text-sm"
+                    >
+                      <option value="">{t('application.licenseCategory')}</option>
+                      <option value="A">Category A (فئة أ)</option>
+                      <option value="B">Category B (فئة ب)</option>
+                      <option value="C">Category C (فئة ج)</option>
+                      <option value="D">Category D (فئة د)</option>
+                      <option value="E">Category E (فئة هـ)</option>
+                    </select>
+                  )}
+                </div>
+              </div>
+              <div className={questionRowClass}>
+                <span className="text-sm font-medium text-gray-700">{t('application.isSmoker')}</span>
+                <YesNoToggle value={additionalQuestions.is_smoker} onChange={(v) => updateAdditional('is_smoker', v)} />
+              </div>
+              <div className={questionRowClass}>
+                <span className="text-sm font-medium text-gray-700">{t('application.hasChronicDiseases')}</span>
+                <div className="flex flex-col gap-2">
+                  <YesNoToggle value={additionalQuestions.has_chronic_diseases} onChange={(v) => updateAdditional('has_chronic_diseases', v)} />
+                  {additionalQuestions.has_chronic_diseases && (
+                    <textarea
+                      value={additionalQuestions.medical_status_details}
+                      onChange={(e) => updateAdditional('medical_status_details', e.target.value)}
+                      rows={3}
+                      placeholder={t('application.medicalStatusDetails')}
+                      className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1a365d] text-sm w-full min-w-[240px]"
+                    />
+                  )}
+                </div>
+              </div>
+              <div className={questionRowClass}>
+                <label className="text-sm font-medium text-gray-700">{t('application.expectedJoiningDate')}</label>
+                <input
+                  type="date"
+                  value={additionalQuestions.expected_joining_date}
+                  onChange={(e) => updateAdditional('expected_joining_date', e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1a365d] text-sm"
+                />
+              </div>
+            </div>
+          </section>
+
+          {/* 7. References */}
+          <section className="bg-white rounded-lg shadow-md p-6">
+            <div className="flex items-center justify-between mb-1">
+              <h2 className="text-xl font-bold text-[#1a365d]">{t('application.references')}</h2>
+              <button type="button" onClick={addReference} className="flex items-center space-x-1 text-[#1a365d] hover:text-[#f6ad55] transition">
+                <Plus className="w-4 h-4" /><span className="text-sm">{t('application.addReference')}</span>
+              </button>
+            </div>
+            <p className="text-sm text-gray-500 mb-4">{t('application.referencesSubtitle')}</p>
+            {references.map((ref, i) => (
+              <div key={i} className="border border-gray-200 rounded-lg p-4 mb-4">
+                <div className="flex justify-between items-center mb-3">
+                  <span className="font-medium text-[#1a365d] text-sm">Reference {i + 1}</span>
+                  {references.length > 2 && (
+                    <button type="button" onClick={() => removeReference(i)} className="text-red-500 hover:text-red-700"><Trash2 className="w-4 h-4" /></button>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div><label className={labelClass}>{t('application.referenceName')} *</label><input type="text" required value={ref.name} onChange={(e) => updateReference(i, 'name', e.target.value)} className={inputClass} /></div>
+                  <div><label className={labelClass}>{t('application.referencePhone')} *</label><input type="tel" required value={ref.phone} onChange={(e) => updateReference(i, 'phone', e.target.value)} className={inputClass} /></div>
+                  <div><label className={labelClass}>{t('application.referenceRelationship')}</label><input type="text" value={ref.relationship} onChange={(e) => updateReference(i, 'relationship', e.target.value)} className={inputClass} placeholder="e.g. Former Manager" /></div>
+                  <div><label className={labelClass}>{t('application.referenceCompany')}</label><input type="text" value={ref.company} onChange={(e) => updateReference(i, 'company', e.target.value)} className={inputClass} /></div>
+                </div>
+              </div>
+            ))}
+          </section>
+
+          {/* 8. Salary Information */}
           <section className="bg-white rounded-lg shadow-md p-6">
             <h2 className="text-xl font-bold text-[#1a365d] mb-4">{t('application.salaryInfo')}</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -470,6 +694,7 @@ export default function ApplicationForm() {
             </div>
           </section>
 
+          {/* 9. Documents */}
           <section className="bg-white rounded-lg shadow-md p-6">
             <h2 className="text-xl font-bold text-[#1a365d] mb-6">{t('application.documents')}</h2>
 
@@ -520,6 +745,7 @@ export default function ApplicationForm() {
             </div>
           </section>
 
+          {/* 10. Submit */}
           <button
             type="submit"
             disabled={loading}
